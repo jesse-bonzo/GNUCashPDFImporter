@@ -1,152 +1,112 @@
-import com.webcohesion.ofx4j.domain.data.ResponseEnvelope
-import com.webcohesion.ofx4j.domain.data.common.Status
-import com.webcohesion.ofx4j.domain.data.investment.accounts.InvestmentAccountDetails
-import com.webcohesion.ofx4j.domain.data.investment.statements.InvestmentStatementResponse
-import com.webcohesion.ofx4j.domain.data.investment.statements.InvestmentStatementResponseMessageSet
-import com.webcohesion.ofx4j.domain.data.investment.statements.InvestmentStatementResponseTransaction
-import com.webcohesion.ofx4j.domain.data.investment.transactions.*
-import com.webcohesion.ofx4j.domain.data.seclist.SecurityId
-import com.webcohesion.ofx4j.io.AggregateMarshaller
-import com.webcohesion.ofx4j.io.v2.OFXV2Writer
 import java.io.File
-import java.math.BigDecimal
 import java.nio.file.Paths
 import java.time.LocalDate
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.*
 
 @Suppress("IMPLICIT_CAST_TO_ANY")
 class BettermentStatementParser {
 
     private val dividendLinePattern = Regex("""(\w\w\w \d+ \d\d\d\d)\s(\w+)\s(.*)\s(-?\$[\d,]+\.\d\d)""")
+    private val dividendStartPattern = Regex("Dividend Payment Detail")
+    private val dividendEndPattern = Regex("""^Total\s\$[\d,]+\.\d\d$""", RegexOption.MULTILINE)
     private val linePattern =
-        Regex("""(\w+)?\s(\w\w\w \d\d? \d\d\d\d)\s(\w*)\s(\$[\d,]+\.\d\d)\s(-?\d+\.\d+)\s(-?\$[\d,]+\.\d\d)""")
+        Regex(
+            """^([\w ]+)? ?(\w\w\w \d\d? \d\d\d\d) (\w\w\w\w?) (\$[\d,]+\.\d\d) (-?[\d,]+\.\d\d\d) (-?\$[\d,]+\.\d\d) (-?[\d,]+\.\d\d\d) (-?\$[\d,]+\.\d\d)$""",
+            RegexOption.MULTILINE
+        )
+    private val accountStartPattern = Regex("""^([\w\s]+) \(ACCT # (\d+)\)$""", RegexOption.MULTILINE)
+    private val cashReserveLinePattern = Regex("""(\w\w\w \d+, \d+)\s(.*)\s(-?\$[\d,]+\.\d\d)""")
+    private val cashReserveTransactionDateFormat = DateTimeFormatter.ofPattern("MMM d, yyyy")
+    private val dividendPaymentDateFormat = DateTimeFormatter.ofPattern("MMM d yyyy")
+    private val cashActivityStartPattern = Regex("^CASH ACTIVITY", RegexOption.MULTILINE)
+    private val cashActivityLinePattern = Regex(
+        """^(\w\w\w \d\d? \d\d\d\d) ([\w ]+) (Deposit from Linked Bank Account) (-?\$[\d,]+\.\d\d) (-?\$[\d,]+\.\d\d)$""",
+        RegexOption.MULTILINE
+    )
 
     fun parse(inputFile: File) {
-        val pdfText = extractText(inputFile)
-        var acctIndex = pdfText.indexOf("ACCT # ")
-        while (acctIndex >= 0) {
-            val nextAcctIndex = pdfText.indexOf("ACCT # ", acctIndex + 1)
-            val accountStatement = if (nextAcctIndex < 0) {
-                pdfText.substring(acctIndex)
-            } else {
-                pdfText.substring(acctIndex, nextAcctIndex)
-            }
-            processAccount(accountStatement)
+        Paths.get("output").toFile().mkdirs()
 
-            acctIndex = nextAcctIndex
+        val pdfText = extractText(inputFile)
+        var accountPatternMatch = accountStartPattern.find(pdfText)
+        while (accountPatternMatch != null) {
+            val accountType = accountPatternMatch.groupValues[1]
+            val accountNumber = accountPatternMatch.groupValues[2]
+            val next = accountPatternMatch.next();
+            val accountStatement =
+                pdfText.substring(accountPatternMatch.range.first, next?.range?.first ?: pdfText.length)
+            processAccount(accountType, accountNumber, accountStatement)
+            accountPatternMatch = next
         }
     }
 
-    private fun processAccount(accountStatement: String) {
-        val accountNumber = accountStatement.substring(0, accountStatement.indexOf(')')).replace("ACCT # ", "")
-
-        Paths.get("output", "$accountNumber dividends.csv").toFile().let { outputFile ->
+    private fun processAccount(accountType: String, accountNumber: String, accountStatement: String) {
+        if (accountType == "CASH RESERVE") {
+            val outputFile = Paths.get("output", "$accountType $accountNumber.csv").toFile()
             outputFile.printWriter().use { writer ->
-                val start = accountStatement.indexOf("Dividend Payment Detail")
-                val end = accountStatement.indexOf("Quarterly Activity Detail")
-                dividendLinePattern.findAll(
-                    accountStatement.substring(
-                        if (start < 0) 0 else start, if (end < 0) accountStatement.length else end
+                val lines = cashReserveLinePattern.findAll(accountStatement)
+                for (line in lines) {
+                    val date = LocalDate.parse(line.groupValues[1], cashReserveTransactionDateFormat)
+                    val description = line.groupValues[2]
+                    val amount = line.groupValues[3]
+                    writer.println("$date|$description|$amount")
+                }
+            }
+        } else {
+            val transactionsFile = Paths.get("output", "$accountType $accountNumber transactions.csv").toFile()
+            transactionsFile.printWriter().use { writer ->
+                // if there are goals there will be multiple blocks of dividend payments
+                var dividendStart = dividendStartPattern.find(accountStatement)
+                while (dividendStart != null) {
+                    val start = dividendStart.range.last
+                    val end = dividendEndPattern.find(accountStatement, start)?.range?.start ?: accountStatement.length
+                    val dividendStatement = accountStatement.substring(if (start < 0) 0 else start, end)
+                    for (line in dividendLinePattern.findAll(dividendStatement)) {
+                        val paymentDate = LocalDate.parse(line.groupValues[1], dividendPaymentDateFormat)
+                        val fund = line.groupValues[2]
+                        val description = line.groupValues[3]
+                        val amount = line.groupValues[4]
+                        writer.println("$paymentDate|$fund $description|$amount")
+                    }
+                    dividendStart = dividendStartPattern.find(accountStatement, end)
+                }
+
+                for (cashActivityStart in cashActivityStartPattern.findAll(accountStatement)) {
+                    for (cashActivityLine in cashActivityLinePattern.findAll(
+                        accountStatement, cashActivityStart.range.last
+                    )) {
+                        val transactionDate =
+                            LocalDate.parse(cashActivityLine.groupValues[1], dividendPaymentDateFormat)
+                        val description = cashActivityLine.groupValues[3]
+                        val deposit = cashActivityLine.groupValues[4]
+                        writer.println("$transactionDate|$description|$deposit")
+                    }
+                }
+            }
+
+            val outputFile = Paths.get("output", "$accountType $accountNumber.txt").toFile()
+            outputFile.printWriter().use { writer ->
+                val lines = linePattern.findAll(accountStatement)
+                for (line in lines) {
+                    val transactionDate = LocalDate.parse(line.groupValues[2], dividendPaymentDateFormat).format(
+                        DateTimeFormatter.ofPattern("MM/dd/yyyy")
                     )
-                ).forEach {
-                    val paymentDate = LocalDate.parse(it.groupValues[1], DateTimeFormatter.ofPattern("MMM d yyyy"))
-                    val fund = it.groupValues[2]
-                    val description = it.groupValues[3]
-                    val amount = it.groupValues[4]
-                    writer.println("$paymentDate|$fund $description|$amount")
+                    val fund = line.groupValues[3].trim()
+                    // val price = line.groupValues[4].replace("$", "").replace(",", "").trim()
+                    val shares = line.groupValues[5].trim()
+                    val value = line.groupValues[6].replace("$", "").replace(",", "").trim()
+                    val description = if (shares.startsWith('-')) {
+                        "Sell $fund {Backspace}"
+                    } else {
+                        "Buy $fund {Backspace}{Tab}" // buy needs an extra tab...
+                    }
+                    // Generate AutoHotKey commands to send to GnuCash...
+                    val absShares = shares.replace("-", "")
+                    val absValue = value.replace("-", "")
+                    // we're counting on GnuCash to send us to the right place based on the description!
+                    writer.println("$transactionDate{Tab}{Tab}$description{Tab}{Tab}$absValue{Enter}{Tab}{Down}{Tab}$absShares{Enter}")
                 }
             }
-        }
-
-        val transactions: List<BaseInvestmentTransaction> = linePattern.findAll(accountStatement).map {
-            val description = it.groupValues[1]
-            val transactionDate = LocalDate.parse(it.groupValues[2], DateTimeFormatter.ofPattern("MMM d yyyy"))
-            val fund = it.groupValues[3].trim()
-            val price = it.groupValues[4].replace("$", "").replace(",", "").trim()
-            val shares = it.groupValues[5].trim()
-            val value = it.groupValues[6].replace("$", "").replace(",", "").trim()
-
-            val transaction: BaseInvestmentTransaction = if (value.contains('-')) {
-                SellStockTransaction().apply {
-                    sellInvestment = SellInvestmentTransaction().apply {
-                        unitPrice = BigDecimal(price).toDouble()
-                        units = BigDecimal(shares).toDouble()
-                        total = BigDecimal(value).toDouble()
-                        sellType = SellType.SELL.name
-                        securityId = SecurityId().apply {
-                            this.uniqueId = fund
-                            this.uniqueIdType = "TICKER"
-                        }
-                        investmentTransaction = InvestmentTransaction().apply {
-                            memo = description
-                            tradeDate = Date(
-                                transactionDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                            )
-                            transactionId = UUID.randomUUID().toString()
-                        }
-                    }
-                }
-            } else {
-                BuyStockTransaction().apply {
-                    buyInvestment = BuyInvestmentTransaction().apply {
-                        unitPrice = BigDecimal(price).toDouble()
-                        units = BigDecimal(shares).toDouble()
-                        total = BigDecimal(value).toDouble()
-                        buyType = BuyType.BUY.name
-                        securityId = SecurityId().apply {
-                            this.uniqueId = fund
-                            this.uniqueIdType = "TICKER"
-                        }
-                        investmentTransaction = InvestmentTransaction().apply {
-                            memo = description
-                            tradeDate = Date(
-                                transactionDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                            )
-                            transactionId = UUID.randomUUID().toString()
-                        }
-                    }
-                }
-            }
-            return@map transaction
-        }.toList()
-
-        if (transactions.isEmpty()) {
-            return
-        }
-
-        Paths.get("output").toFile().mkdirs()
-        val outputFile = Paths.get("output", "$accountNumber.ofx").toFile()
-        val marshaller = AggregateMarshaller()
-        val writer = OFXV2Writer(outputFile.writer())
-        writer.isWriteAttributesOnNewLine = true
-        try {
-            marshaller.marshal(ResponseEnvelope().apply {
-                this.messageSets = sortedSetOf(InvestmentStatementResponseMessageSet().apply {
-                    this.statementResponse = InvestmentStatementResponseTransaction().apply {
-                        this.uid = UUID.randomUUID().toString()
-                        this.status = Status().apply {
-                            this.code = Status.KnownCode.SUCCESS
-                            this.severity = Status.Severity.INFO
-                        }
-                        this.message = InvestmentStatementResponse().apply {
-                            dateOfStatement = Date()
-                            account = InvestmentAccountDetails().apply {
-                                this.brokerId = "Betterment"
-                                this.accountNumber = accountNumber
-                            }
-                            this.investmentTransactionList = InvestmentTransactionList().apply {
-                                this.start = transactions.map { it.tradeDate }.min()
-                                this.end = transactions.map { it.tradeDate }.max()
-                                this.investmentTransactions = transactions
-                            }
-                        }
-                    }
-                })
-            }, writer)
-        } finally {
-            writer.close()
         }
     }
 }
