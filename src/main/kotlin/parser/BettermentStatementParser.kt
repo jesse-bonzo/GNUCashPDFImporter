@@ -1,8 +1,11 @@
-import java.io.File
+package parser
+
+import parser.input.ParserInput
+import parser.output.ParserOutput
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-class BettermentStatementParser {
+class BettermentStatementParser : StatementParser {
 
     private val dividendLinePattern = Regex("""(\w\w\w \d+ \d\d\d\d)\s(\w+)\s(.*)\s(-?\$[\d,]+\.\d\d)""")
     private val dividendStartPattern = Regex("Dividend Payment Detail")
@@ -21,13 +24,13 @@ class BettermentStatementParser {
         RegexOption.MULTILINE
     )
 
-    fun parse(inputFile: File) {
-        val pdfText = extractText(inputFile)
+    override fun parse(input: ParserInput, output: ParserOutput) {
+        val pdfText = input.getText()
         var accountPatternMatch = accountStartPattern.find(pdfText)
         while (accountPatternMatch != null) {
             val accountType = accountPatternMatch.groupValues[1]
             val accountNumber = accountPatternMatch.groupValues[2]
-            val next = accountPatternMatch.next();
+            val next = accountPatternMatch.next()
             val accountStatement =
                 pdfText.substring(accountPatternMatch.range.first, next?.range?.first ?: pdfText.length)
             processAccount(accountType, accountNumber, accountStatement)

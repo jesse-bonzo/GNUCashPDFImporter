@@ -1,20 +1,22 @@
-import java.io.File
+package parser
+
+import parser.input.ParserInput
+import parser.output.ParserOutput
 import java.util.regex.Pattern
 
-class RobinhoodStatementParser {
+class RobinhoodStatementParser : StatementParser {
     private val linePattern =
         Pattern.compile("(ACH Deposit|([A-Z]{1,4})) Margin ([A-Za-z]*) (\\d\\d\\/\\d\\d\\/\\d\\d\\d\\d) (\\d+ )*(\\\$[\\d,]+\\.\\d\\d)(\\s\\\$[\\d,]+\\.\\d\\d)*")
 
-    fun parse(inputFile: File, outputFile: File) {
-        val pdfText = extractText(inputFile)
-        val matcher = linePattern.matcher(pdfText)
+    override fun parse(input: ParserInput, output: ParserOutput) {
+        val matcher = linePattern.matcher(input.getText())
         val lines = mutableListOf<StatmentLine>()
         while (matcher.find()) {
             lines.add(StatmentLine.parse((1..matcher.groupCount()).mapNotNull { matcher.group(it) }.toList()))
         }
-        outputFile.printWriter().use { writer ->
-            lines.filter { it.amount != "\$0.00" }.map { it.toCSV() }.forEach { writer.println(it) }
-        }
+//        outputFile.printWriter().use { writer ->
+//            lines.filter { it.amount != "\$0.00" }.map { it.toCSV() }.forEach { writer.println(it) }
+//        }
     }
 
     data class StatmentLine(

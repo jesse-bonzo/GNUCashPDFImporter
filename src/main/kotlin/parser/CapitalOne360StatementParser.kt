@@ -1,11 +1,16 @@
+package parser
+
 import com.opencsv.CSVWriter
+import parser.input.ParserInput
+import parser.output.ParserOutput
+import pdf.extractText
 import java.io.File
 import java.io.FileOutputStream
 import java.io.PrintWriter
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-class CapitalOne360StatementParser {
+class CapitalOne360StatementParser : StatementParser {
     private val accountTitleRegex = Regex("""^([\w ]+) - (\d+)$""", RegexOption.MULTILINE)
     private val statementPeriodRegex = Regex("""^(\w\w\w \d\d?) - (\w\w\w \d\d?), (\d\d\d\d)""", RegexOption.MULTILINE)
     private val linePattern =
@@ -15,19 +20,19 @@ class CapitalOne360StatementParser {
         )
     private val dateFormat = DateTimeFormatter.ofPattern("MMM d yyyy")
 
-    fun parse(inputFile: File) {
+    override fun parse(input: ParserInput, output: ParserOutput) {
         // create the output directory fresh
-        val outputDir = File("output")
-        outputDir.deleteRecursively()
-        outputDir.mkdirs()
-
-        if (inputFile.isDirectory) {
-            inputFile.listFiles()?.forEach { file ->
-                processFile(file)
-            }
-        } else {
-            processFile(inputFile)
-        }
+//        val outputDir = File("output")
+//        outputDir.deleteRecursively()
+//        outputDir.mkdirs()
+//
+//        if (inputFile.isDirectory) {
+//            inputFile.listFiles()?.forEach { file ->
+//                processFile(file)
+//            }
+//        } else {
+//            processFile(inputFile)
+//        }
     }
 
     private fun processFile(inputFile: File) {

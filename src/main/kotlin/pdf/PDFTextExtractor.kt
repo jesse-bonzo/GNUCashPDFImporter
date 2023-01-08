@@ -1,3 +1,5 @@
+package pdf
+
 import org.apache.pdfbox.io.RandomAccessFile
 import org.apache.pdfbox.pdfparser.PDFParser
 import org.apache.pdfbox.text.PDFTextStripper

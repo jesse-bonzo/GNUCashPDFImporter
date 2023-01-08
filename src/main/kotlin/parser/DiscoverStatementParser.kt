@@ -1,27 +1,29 @@
-import java.io.File
+package parser
+
+import parser.input.ParserInput
+import parser.output.ParserOutput
 import java.time.LocalDate
 import java.time.MonthDay
 import java.time.format.DateTimeFormatter
 import java.util.regex.Pattern
 
-class DiscoverStatementParser {
+object DiscoverStatementParser : StatementParser {
 
     // I don't remember why I put this here...
     // private val linePattern = Pattern.compile("(\\d\\d/\\d\\d)\\s(.*)\\s(-?\\\$[\\d,]+\\.\\d\\d)")
 
-    fun parse(inputFile: File, outputFile: File) {
-        val pdfText = extractText(inputFile)
-        val lines = parse(pdfText)
+    override fun parse(input: ParserInput, output: ParserOutput) {
+        val lines = parse(input.getText())
         //+ gatherLines(pdfText, linePattern)
-        outputFile.printWriter().use { writer ->
-            lines.filter {
-                it.amount != "\$0.00"
-            }.map {
-                it.toCSV()
-            }.forEach {
-                writer.println(it)
-            }
-        }
+//        outputFile.printWriter().use { writer ->
+//            lines.filter {
+//                it.amount != "\$0.00"
+//            }.map {
+//                it.toCSV()
+//            }.forEach {
+//                writer.println(it)
+//            }
+//        }
     }
 
     private fun parse(file: String): List<StatmentLine> {
@@ -122,6 +124,7 @@ class DiscoverStatementParser {
                         val amount = line[2]
                         return StatmentLine(transactionDate, description, amount)
                     }
+
                     4 -> {
                         val transactionDate =
                             MonthDay.parse(line[0], DateTimeFormatter.ofPattern("MMM dd")).atYear(LocalDate.now().year)
@@ -130,6 +133,7 @@ class DiscoverStatementParser {
                         val amount = line[3]
                         return StatmentLine(transactionDate, description, amount)
                     }
+
                     else -> {
                         throw RuntimeException("Unknown line!")
                     }

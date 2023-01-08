@@ -1,33 +1,58 @@
 import org.apache.commons.cli.DefaultParser
+import org.apache.commons.cli.MissingArgumentException
 import org.apache.commons.cli.Options
+import parser.*
+import parser.input.PDFParserInput
+import parser.output.CSVParserOutput
 import java.io.File
 
 fun main(args: Array<String>) {
-    val cmd = DefaultParser().parse(options(), args)
-    val inputFile = File(cmd.getOptionValue("i"))
-    val outputFile = File(cmd.getOptionValue("o"))
-    when (val statementType = cmd.getOptionValue("t")) {
-        "synchrony" -> SynchronyCardStatementParser().parse(inputFile, outputFile)
-        "synchrony_old" -> SynchronyOldCardStatementParser().parse(inputFile, outputFile)
-        "bofa" -> BankOfAmericaStatementParser().parse(inputFile, outputFile)
-        "citi" -> CitiStatementParser().parse(inputFile, outputFile)
-        "amex" -> AmexStatementParser().parse(inputFile, outputFile)
-        "discover" -> DiscoverStatementParser().parse(inputFile, outputFile)
-        "capitalone360" -> CapitalOne360StatementParser().parse(inputFile)
-        "betterment" -> BettermentStatementParser().parse(inputFile)
-        "robinhood" -> RobinhoodStatementParser().parse(inputFile, outputFile)
-        "paypal" -> PayPalStatementParser().parse(inputFile, outputFile)
-        "chase" -> ChaseStatementParser().parse(inputFile, outputFile)
-        "vanguard" -> VanguardStatementParser.parse(inputFile, outputFile)
-        "kplan" -> KPlanStatementParser.parse(inputFile, outputFile)
-        else -> println("Unknown statement type $statementType")
+    try {
+        val cmd = DefaultParser().parse(options(), args)
+        val inputFile = File(cmd.getOptionValue("i"))
+        val outputFile = File(cmd.getOptionValue("o"))
+        val parser = when (val statementType = cmd.getOptionValue("t")) {
+            "synchrony" -> SynchronyCardStatementParser()
+            "bofa" -> BankOfAmericaStatementParser()
+            "citi" -> CitiStatementParser()
+            "amex" -> AmexStatementParser()
+            "discover" -> DiscoverStatementParser
+            "capitalone360" -> CapitalOne360StatementParser()
+            "betterment" -> BettermentStatementParser()
+            "robinhood" -> RobinhoodStatementParser()
+            "paypal" -> PayPalStatementParser()
+            "chase" -> ChaseStatementParser()
+            "vanguard" -> VanguardStatementParser
+            "kplan" -> KPlanStatementParser
+            else -> throw Exception("Unknown statement type: \"$statementType\"")
+        }
+
+        val input = if (inputFile.exists()) {
+            when (inputFile.extension) {
+                "pdf" -> PDFParserInput(inputFile)
+                else -> throw Exception("Unknown input type: \"$inputFile\"")
+            }
+        } else {
+            throw Exception("Input file \"$inputFile\" does not exist")
+        }
+
+        val output = when (outputFile.extension) {
+            "csv" -> CSVParserOutput(outputFile)
+            "gnucash" -> throw Exception("Not supported yet") // TODO: Could be xml or sqlite
+            else -> throw Exception("Unknown output type: \"$outputFile\"")
+        }
+
+        parser.parse(input, output)
+    } catch (missingArgumentException: MissingArgumentException) {
+        // TODO: be more helpful
+        println("-i inputfile -o outputfile -t type")
     }
 }
 
 fun options(): Options {
     return Options().apply {
-        addOption("i", "input", true, "input file name")
-        addOption("o", "output", true, "output file name")
-        addOption("t", "type", true, "statement type")
+        addRequiredOption("i", "input", true, "input file name")
+        addRequiredOption("o", "output", true, "output file name")
+        addRequiredOption("t", "type", true, "statement type")
     }
 }
