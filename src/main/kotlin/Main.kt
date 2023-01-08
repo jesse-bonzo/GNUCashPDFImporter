@@ -19,6 +19,7 @@ fun main(args: Array<String>) {
         "paypal" -> PayPalStatementParser().parse(inputFile, outputFile)
         "chase" -> ChaseStatementParser().parse(inputFile, outputFile)
         "vanguard" -> VanguardStatementParser.parse(inputFile, outputFile)
+        "kplan" -> KPlanStatementParser.parse(inputFile, outputFile)
         else -> println("Unknown statement type $statementType")
     }
 }
