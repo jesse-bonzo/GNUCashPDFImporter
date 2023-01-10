@@ -1,6 +1,6 @@
 package parser.input
 
-sealed interface ParserInput {
+sealed interface ParserInput : AutoCloseable {
     fun getText(): String
 
 }

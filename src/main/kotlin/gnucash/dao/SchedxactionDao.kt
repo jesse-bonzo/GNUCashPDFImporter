@@ -3,7 +3,7 @@ package gnucash.dao
 import gnucash.entity.Schedxaction
 import java.sql.ResultSet
 
-class SchedxactionDao : BaseDao<Schedxaction>() {
+object SchedxactionDao : BaseDao<Schedxaction>() {
     override val table = "schedxactions"
     override val columns = listOf(
         "guid",

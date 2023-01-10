@@ -3,7 +3,7 @@ package gnucash.dao
 import gnucash.entity.Lot
 import java.sql.ResultSet
 
-class LotDao : BaseDao<Lot>() {
+object LotDao : BaseDao<Lot>() {
     override val table = "lots"
     override val columns = listOf("guid", "account_guid", "is_closed")
     override fun createEntity(resultSet: ResultSet): Lot {

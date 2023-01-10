@@ -3,7 +3,7 @@ package gnucash.dao
 import gnucash.entity.Taxtable
 import java.sql.ResultSet
 
-class TaxtableDao : BaseDao<Taxtable>() {
+object TaxtableDao : BaseDao<Taxtable>() {
     override val table = "taxtables"
     override val columns = listOf("guid", "name", "refcount", "invisible", "parent")
     override fun createEntity(resultSet: ResultSet): Taxtable {

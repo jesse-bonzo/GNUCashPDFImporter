@@ -5,7 +5,7 @@ import gnucash.entity.Transaction
 import java.sql.ResultSet
 import java.time.LocalDateTime
 
-class TransactionDao : BaseDao<Transaction>() {
+object TransactionDao : BaseDao<Transaction>() {
     override val table = "transactions"
 
     override val columns = listOf("guid", "currency_guid", "num", "post_date", "enter_date", "description")

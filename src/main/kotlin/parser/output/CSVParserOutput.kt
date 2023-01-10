@@ -16,6 +16,6 @@ class CSVParserOutput(val outputFile: File) : ParserOutput {
     }
 
     fun OutputTransaction.toCSV(): String {
-        return "${fromAccount.name}|${toAccount.name}|${date}|${description}|${amount}"
+        return "${creditAccount ?: ""}|${debitAccount ?: ""}|${postDate}|${description}|${amount}"
     }
 }

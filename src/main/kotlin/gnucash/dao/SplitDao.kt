@@ -7,7 +7,7 @@ import java.sql.Connection
 import java.sql.ResultSet
 import java.time.LocalDateTime
 
-class SplitDao : BaseDao<Split>() {
+object SplitDao : BaseDao<Split>() {
     override val table = "splits"
     override val columns = listOf(
         "guid",

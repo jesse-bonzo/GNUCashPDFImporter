@@ -1,10 +1,11 @@
 package gnucash.dao
 
 import gnucash.entity.Account
+import gnucash.entity.Book
 import java.sql.Connection
 import java.sql.ResultSet
 
-class AccountDao : BaseDao<Account>() {
+object AccountDao : BaseDao<Account>() {
     override val table = "accounts"
     override val columns = listOf(
         "guid",
@@ -47,9 +48,19 @@ class AccountDao : BaseDao<Account>() {
         )
     }
 
-    override fun toMap(entity: Account): Map<String, Any?> {
-        TODO("Not yet implemented")
-    }
+    override fun toMap(entity: Account) = mapOf(
+        "guid" to entity.guid,
+        "name" to entity.name,
+        "account_type" to entity.accountType,
+        "commodity_guid" to entity.commodityGuid,
+        "commodity_scu" to entity.commodityScu,
+        "non_std_scu" to entity.nonStdScu,
+        "parent_guid" to entity.parentGuid,
+        "code" to entity.code,
+        "description" to entity.description,
+        "hidden" to entity.hidden,
+        "placeholder" to entity.placeholder
+    )
 
     fun findChildrenAccounts(connection: Connection, parent: Account) = with(connection) {
         findBy(mapOf("parent_guid" to parent.guid))
@@ -87,4 +98,7 @@ class AccountDao : BaseDao<Account>() {
         }
         return null
     }
+
+    fun getRootAccount(connection: Connection, book: Book) =
+        AccountDao.findByGuid(connection, book.rootAccountGuid) ?: throw Exception("Root account not found")
 }

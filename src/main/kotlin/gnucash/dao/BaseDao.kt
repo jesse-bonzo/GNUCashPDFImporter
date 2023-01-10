@@ -1,15 +1,14 @@
 package gnucash.dao
 
 import gnucash.entity.Entity
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
+import mu.KotlinLogging
 import java.sql.Connection
 import java.sql.ResultSet
 import java.sql.SQLException
 
 abstract class BaseDao<T : Entity> {
 
-    private val log: Logger = LoggerFactory.getLogger(this::class.java)
+    private val log = KotlinLogging.logger { }
 
     abstract val table: String
 
@@ -32,7 +31,7 @@ abstract class BaseDao<T : Entity> {
         val insertColumns = entityMap.keys.joinToString(", ")
         val insertValues = entityMap.values.joinToString(", ") { if (it is String) "\"$it\"" else it.toString() }
         connection.prepareStatement("insert into $table ($insertColumns) values ($insertValues)").use { statement ->
-            log.info(statement.toString())
+            log.trace { statement }
 
             val result = statement.executeUpdate()
             if (result == 0) {
@@ -44,7 +43,7 @@ abstract class BaseDao<T : Entity> {
 
     fun delete(connection: Connection, entity: T): T {
         connection.prepareStatement("delete from $table where guid=${entity.guid}").use { statement ->
-            log.info(statement.toString())
+            log.trace { statement }
 
             val result = statement.executeUpdate()
             if (result == 0) {
@@ -57,7 +56,7 @@ abstract class BaseDao<T : Entity> {
     fun findAll(connection: Connection): List<T> {
         val entities = mutableListOf<T>()
         connection.prepareStatement("select $selectClause from $table").use { statement ->
-            log.info(statement.toString())
+            log.trace { statement }
 
             statement.executeQuery().use { resultSet ->
                 while (resultSet.next()) {
@@ -88,8 +87,8 @@ abstract class BaseDao<T : Entity> {
         } else {
             val entities = mutableListOf<T>()
             prepareStatement("select $selectClause from $table where $whereClause").use { statement ->
-                log.info(statement.toString())
-                
+                log.trace { statement }
+
                 statement.executeQuery().use { resultSet ->
                     while (resultSet.next()) {
                         entities += createEntity(resultSet)

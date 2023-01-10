@@ -3,7 +3,7 @@ package gnucash.dao
 import gnucash.entity.Job
 import java.sql.ResultSet
 
-class JobDao : BaseDao<Job>() {
+object JobDao : BaseDao<Job>() {
     override val table = "jobs"
     override val columns = listOf("guid", "id", "name", "reference", "active", "owner_type", "owner_guid")
     override fun createEntity(resultSet: ResultSet): Job {

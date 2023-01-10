@@ -3,7 +3,7 @@ package gnucash.dao
 import gnucash.entity.Billterm
 import java.sql.ResultSet
 
-class BilltermDao : BaseDao<Billterm>() {
+object BilltermDao : BaseDao<Billterm>() {
     override val table = "billterms"
     override val columns = listOf(
         "guid",

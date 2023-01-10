@@ -1,89 +1,68 @@
 package parser
 
-import com.opencsv.CSVWriter
 import parser.input.ParserInput
+import parser.output.AccountType
+import parser.output.OutputTransaction
 import parser.output.ParserOutput
-import pdf.extractText
-import java.io.File
-import java.io.FileOutputStream
-import java.io.PrintWriter
+import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-class CapitalOne360StatementParser : StatementParser {
+object CapitalOne360StatementParser : StatementParser {
     private val accountTitleRegex = Regex("""^([\w ]+) - (\d+)$""", RegexOption.MULTILINE)
     private val statementPeriodRegex = Regex("""^(\w\w\w \d\d?) - (\w\w\w \d\d?), (\d\d\d\d)""", RegexOption.MULTILINE)
-    private val linePattern =
-        Regex(
-            """^(\w\w\w \d\d?) (.*) (Debit|Credit) (\+|-) (\$[\d,]+\.\d\d) (\$[\d,]+\.\d\d)$""",
-            RegexOption.MULTILINE
-        )
+    private val linePattern = Regex(
+        """^(\w\w\w \d\d?) (.*) (Debit|Credit) (\+|-) \$([\d,]+\.\d\d) \$([\d,]+\.\d\d)$""",
+        RegexOption.MULTILINE
+    )
     private val dateFormat = DateTimeFormatter.ofPattern("MMM d yyyy")
 
     override fun parse(input: ParserInput, output: ParserOutput) {
-        // create the output directory fresh
-//        val outputDir = File("output")
-//        outputDir.deleteRecursively()
-//        outputDir.mkdirs()
-//
-//        if (inputFile.isDirectory) {
-//            inputFile.listFiles()?.forEach { file ->
-//                processFile(file)
-//            }
-//        } else {
-//            processFile(inputFile)
-//        }
-    }
-
-    private fun processFile(inputFile: File) {
-        val pdfText = extractText(inputFile)
+        val pdfText = input.getText()
         var accountTitle = accountTitleRegex.find(pdfText)
+        val transactions = mutableListOf<OutputTransaction>()
         while (accountTitle != null) {
-            val accountName = accountTitle.groupValues[1]
+            accountTitle.groupValues[1]
             val accountNumber = accountTitle.groupValues[2]
             val nextAccountTitle = accountTitleRegex.find(pdfText, accountTitle.range.last)
             val accountStatement =
                 pdfText.substring(accountTitle.range.last, nextAccountTitle?.range?.first ?: pdfText.length)
-            processAccount(accountName, accountNumber, accountStatement)
+            transactions += processAccount(accountNumber, accountStatement)
             accountTitle = nextAccountTitle
+        }
+
+        transactions.forEach {
+            output.write(it)
         }
     }
 
-    private fun processAccount(accountName: String, accountNumber: String, accountStatement: String) {
-        val title = "${accountName}_$accountNumber"
-        val outputFile = File("output", "${title}.csv")
-
+    private fun processAccount(accountNumber: String, accountStatement: String): List<OutputTransaction> {
         val year = statementPeriodRegex.find(accountStatement)?.let { statementPeriod ->
             statementPeriod.groupValues[3]
         } ?: LocalDate.now().year
 
-        PrintWriter(FileOutputStream(outputFile, true).bufferedWriter()).use { writer ->
-            CSVWriter(writer).use { csvWriter ->
-                var found = linePattern.find(accountStatement)
-                while (found != null) {
-                    val transactionDate = LocalDate.parse("${found.groupValues[1]} $year", dateFormat).toString()
-                    val description = found.groupValues[2]
+        val lines = mutableListOf<OutputTransaction>()
+        var found = linePattern.find(accountStatement)
+        while (found != null) {
+            val transactionDate = LocalDate.parse("${found.groupValues[1]} $year", dateFormat)
+            val description = found.groupValues[2]
 
-                    val amount = when (val type = found.groupValues[3]) {
-                        "Debit" -> "-${found.groupValues[5]}"
-                        "Credit" -> found.groupValues[5]
-                        else -> throw IllegalArgumentException("Unknown transaction type: $type")
-                    }
-
-                    csvWriter.writeNext(arrayOf(transactionDate, description, amount))
-                    found = found.next()
-                }
+            val amount = when (val type = found.groupValues[3]) {
+                "Debit" -> "-${found.groupValues[5].replace(",", "")}"
+                "Credit" -> found.groupValues[5].replace(",", "")
+                else -> throw IllegalArgumentException("Unknown transaction type: $type")
             }
-        }
-    }
 
-    data class StatementLine(
-        val transactionDate: String,
-        val description: String,
-        val amount: String
-    ) {
-        fun toCSV(): String {
-            return "${transactionDate},${description},${amount}"
+            lines += OutputTransaction(
+                debitAccount = accountNumber,
+                creditAccount = null,
+                postDate = transactionDate,
+                description = description,
+                amount = BigDecimal(amount),
+                accountType = AccountType.CHECKING_SAVING
+            )
+            found = found.next()
         }
+        return lines
     }
 }

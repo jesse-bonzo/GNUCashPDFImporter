@@ -1,7 +1,9 @@
 package gnucash.entity
 
+import gnucash.guid
+
 data class Account(
-    override var guid: String,
+    override var guid: String = guid(),
     var name: String,
     var accountType: String,
     var commodityGuid: String?,

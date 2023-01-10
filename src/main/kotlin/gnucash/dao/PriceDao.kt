@@ -3,7 +3,7 @@ package gnucash.dao
 import gnucash.entity.Price
 import java.sql.ResultSet
 
-class PriceDao : BaseDao<Price>() {
+object PriceDao : BaseDao<Price>() {
     override val table = "prices"
     override val columns =
         listOf("guid", "commodity_guid", "currency_guid", "date", "source", "type", "value_num", "value_denom")

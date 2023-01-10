@@ -3,7 +3,7 @@ package gnucash.dao
 import gnucash.entity.Invoice
 import java.sql.ResultSet
 
-class InvoiceDao : BaseDao<Invoice>() {
+object InvoiceDao : BaseDao<Invoice>() {
     override val table = "invoices"
     override val columns = listOf(
         "guid",

@@ -4,7 +4,7 @@ import gnucash.entity.Commodity
 import java.sql.Connection
 import java.sql.ResultSet
 
-class CommodityDao : BaseDao<Commodity>() {
+object CommodityDao : BaseDao<Commodity>() {
     override val table = "commodities"
     override val columns = listOf(
         "guid", "namespace", "mnemonic", "fullname", "cusip", "fraction", "quote_flag", "quote_source", "quote_tz"
