@@ -13,4 +13,12 @@ class UtilTest {
         assertEquals(guid, uuid.toGuid().toUUID().toGuid())
         assertEquals(uuid, uuid.toGuid().toUUID().toGuid().toUUID())
     }
+
+    @Test
+    fun createGuid() {
+        for (i in 0..100) {
+            val guid = guid()
+            assertEquals(32, guid.length, guid)
+        }
+    }
 }

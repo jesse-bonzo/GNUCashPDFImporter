@@ -1,44 +1,92 @@
 package parser
 
 import parser.input.ParserInput
+import parser.output.OutputTransaction
 import parser.output.ParserOutput
-import java.util.regex.Pattern
+import java.math.BigDecimal
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
-class RobinhoodStatementParser : StatementParser {
-    private val linePattern =
-        Pattern.compile("(ACH Deposit|([A-Z]{1,4})) Margin ([A-Za-z]*) (\\d\\d\\/\\d\\d\\/\\d\\d\\d\\d) (\\d+ )*(\\\$[\\d,]+\\.\\d\\d)(\\s\\\$[\\d,]+\\.\\d\\d)*")
+object RobinhoodStatementParser : StatementParser {
+    private val stockLinePattern = Regex(
+        """, CUSIP: (\d+) ([A-Z]{1,4}) \w+ (Buy|Sell) (\d\d/\d\d/\d\d\d\d) (\d+) \$(\d+\.\d\d) \$(\d+\.\d\d)$""",
+        RegexOption.MULTILINE
+    )
+    private val achLinePattern =
+        Regex("""(ACH \w+) \w+ ACH (\d\d/\d\d/\d\d\d\d) \$(\d+\.\d\d)$""", RegexOption.MULTILINE)
+    private val interestPattern =
+        Regex("""(Interest Payment \w+) INT (\d\d/\d\d/\d\d\d\d) \$(\d+\.\d\d)$""", RegexOption.MULTILINE)
+    private val dateFormat = DateTimeFormatter.ofPattern("MM/dd/yyyy")
+    private val accountNumberPattern = Regex("""Account #:(\d+)""")
 
     override fun parse(input: ParserInput, output: ParserOutput) {
-        val matcher = linePattern.matcher(input.getText())
-        val lines = mutableListOf<StatmentLine>()
-        while (matcher.find()) {
-            lines.add(StatmentLine.parse((1..matcher.groupCount()).mapNotNull { matcher.group(it) }.toList()))
-        }
-//        outputFile.printWriter().use { writer ->
-//            lines.filter { it.amount != "\$0.00" }.map { it.toCSV() }.forEach { writer.println(it) }
-//        }
-    }
+        val text = input.getText()
+        val accountNumber = accountNumberPattern.find(text)?.groupValues?.get(1)
+            ?: throw RobinhoodParsingException("Unable to find account number")
+        val accountActivityIndex = text.indexOf("Account Activity")
+        val importantInformationIndex = text.indexOf("Important Information", accountActivityIndex)
 
-    data class StatmentLine(
-        val symbol: String,
-        val transaction: String,
-        val date: String,
-        val quantity: String,
-        val price: String,
-        val amount: String
-    ) {
-        fun toCSV(): String {
-            return "$symbol|$transaction|$date|$quantity|$price|$amount"
-        }
+        val accountActivity = text.substring(accountActivityIndex, importantInformationIndex)
 
-        companion object {
-            fun parse(line: List<String>): StatmentLine {
-                if (line.size == 4 && line[1] == "ACH") {
-                    return StatmentLine(line[1], line[0], line[2], "", "", line[3])
-                } else {
-                    return StatmentLine(line[1], line[2], line[3], line[4], line[5], line[6])
-                }
+        stockLinePattern.findAll(accountActivity).forEach { match ->
+            val (cusip, symbol, transaction, date, quantity, price, amount) = match.destructured
+
+            var debitAccount: String? = null
+            var creditAccount: String? = null
+            if (transaction == "Buy") {
+                debitAccount = cusip
+            } else if (transaction == "Sell") {
+                creditAccount = cusip
             }
+
+            output.write(
+                OutputTransaction(
+                    debitAccount = debitAccount,
+                    creditAccount = creditAccount,
+                    postDate = LocalDate.parse(date, dateFormat),
+                    amount = BigDecimal(amount),
+                    price = BigDecimal(price),
+                    quantity = BigDecimal(quantity),
+                    description = symbol
+                )
+            )
+        }
+
+        achLinePattern.findAll(accountActivity).forEach { match ->
+            val (description, date, amount) = match.destructured
+
+            var debitAccount: String? = null
+            var creditAccount: String? = null
+            if (description.contains("Withdrawal")) {
+                debitAccount = accountNumber
+            } else {
+                creditAccount = accountNumber
+            }
+
+            output.write(
+                OutputTransaction(
+                    debitAccount = debitAccount,
+                    creditAccount = creditAccount,
+                    postDate = LocalDate.parse(date, dateFormat),
+                    amount = BigDecimal(amount),
+                    description = description
+                )
+            )
+        }
+
+        interestPattern.findAll(accountActivity).forEach { match ->
+            val (description, date, amount) = match.destructured
+
+            output.write(
+                OutputTransaction(
+                    creditAccount = accountNumber,
+                    postDate = LocalDate.parse(date, dateFormat),
+                    amount = BigDecimal(amount),
+                    description = description
+                )
+            )
         }
     }
 }
+
+class RobinhoodParsingException(message: String) : ParsingException(message)

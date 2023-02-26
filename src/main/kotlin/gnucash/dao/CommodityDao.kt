@@ -26,4 +26,16 @@ object CommodityDao : BaseDao<Commodity>() {
     fun findCurrencyByMnemonic(connection: Connection, mnemonic: String) = with(connection) {
         findBy(mapOf("namespace" to "CURRENCY", "mnemonic" to mnemonic)).firstOrNull()
     }
+
+    override fun toMap(entity: Commodity) = mapOf(
+        "guid" to entity.guid,
+        "namespace" to entity.namespace,
+        "mnemonic" to entity.mnemonic,
+        "fullname" to entity.fullname,
+        "cusip" to entity.cusip,
+        "fraction" to entity.fraction,
+        "quote_flag" to entity.quoteFlag,
+        "quote_source" to entity.quoteSource,
+        "quote_tz" to entity.quoteTz
+    )
 }

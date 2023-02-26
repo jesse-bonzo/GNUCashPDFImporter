@@ -3,7 +3,7 @@ package parser.output
 import java.io.File
 import java.io.PrintWriter
 
-class CSVParserOutput(val outputFile: File) : ParserOutput {
+class CSVParserOutput(outputFile: File) : ParserOutput {
 
     private val writer: PrintWriter = outputFile.printWriter()
 
@@ -15,7 +15,15 @@ class CSVParserOutput(val outputFile: File) : ParserOutput {
         writer.close()
     }
 
-    fun OutputTransaction.toCSV(): String {
-        return "${creditAccount ?: ""}|${debitAccount ?: ""}|${postDate}|${description}|${amount}"
-    }
+    private fun OutputTransaction.toCSV() = listOfNotNull(
+        debitAccount,
+        creditAccount,
+        symbol,
+        postDate,
+        description,
+        reference,
+        price,
+        quantity,
+        amount,
+    ).joinToString("|")
 }

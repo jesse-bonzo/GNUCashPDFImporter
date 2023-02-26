@@ -15,7 +15,7 @@ fun main(args: Array<String>) {
         val cmd = DefaultParser().parse(options(), args)
         val inputFile = File(cmd.getOptionValue("i"))
         val outputFile = File(cmd.getOptionValue("o"))
-        val statementType = cmd.getOptionValue("t")
+        val statementType = cmd.getOptionValue("t") ?: StatementTypeDiscoverer.discover(inputFile)
         val accountsYml = cmd.getOptionValue("a")
 
         val configuration = configuration(accountsYml)
@@ -35,7 +35,7 @@ fun options(): Options {
     return Options().apply {
         addRequiredOption("i", "input", true, "input file name")
         addRequiredOption("o", "output", true, "output file name")
-        addRequiredOption("t", "type", true, "statement type")
+        addOption("t", "type", true, "statement type")
         addRequiredOption("a", "accounts-yml", true, "Accounts yaml configuration file")
     }
 }
@@ -43,18 +43,16 @@ fun options(): Options {
 fun configuration(accountsYmlFile: String) = Configuration(accountsYmlFile)
 
 fun parser(statementType: String) = when (statementType) {
-    "synchrony" -> SynchronyCardStatementParser()
-    "bofa" -> BankOfAmericaStatementParser()
-    "citi" -> CitiStatementParser()
-    "amex" -> AmexStatementParser()
-    "discover" -> DiscoverStatementParser
-    "capitalone360" -> CapitalOne360StatementParser
-    "betterment" -> BettermentStatementParser()
-    "robinhood" -> RobinhoodStatementParser()
-    "paypal" -> PayPalStatementParser()
+    "amex" -> AmexStatementParser
+    "betterment" -> BettermentStatementParser
+    "bofa" -> BankOfAmericaStatementParser
+    "capitalone" -> CapitalOne360StatementParser
     "chase" -> ChaseStatementParser
+    "citi" -> CitiStatementParser
+    "discover" -> DiscoverStatementParser
+    "paypal" -> PayPalStatementParser
+    "robinhood" -> RobinhoodStatementParser
     "vanguard" -> VanguardStatementParser
-    "kplan" -> KPlanStatementParser
     else -> throw Exception("Unknown statement type: \"$statementType\"")
 }
 
@@ -69,7 +67,7 @@ fun input(inputFile: File) = if (inputFile.exists()) {
 
 fun output(outputFile: File, configuration: Configuration) = when (outputFile.extension) {
     "csv" -> CSVParserOutput(outputFile)
-    "gnucash" -> if (isGzipped(outputFile)) {
+    "gnucash" -> if (outputFile.isGzipped()) {
         XMLParserOutput(outputFile)
     } else {
         SQLiteParserOutput(outputFile, configuration.accountsConfiguration)
@@ -78,7 +76,7 @@ fun output(outputFile: File, configuration: Configuration) = when (outputFile.ex
     else -> throw Exception("Unknown output type: \"$outputFile\"")
 }
 
-fun isGzipped(file: File): Boolean = file.inputStream().use { inputStream ->
+fun File.isGzipped(): Boolean = inputStream().use { inputStream ->
     val firstByte = inputStream.read().toUInt()
     val secondByte = inputStream.read().toUInt()
     val magic = firstByte.or(secondByte.shl(8))

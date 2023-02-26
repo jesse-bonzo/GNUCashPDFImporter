@@ -3,6 +3,7 @@ package gnucash.dao
 import gnucash.DATETIME_FORMAT
 import gnucash.entity.Account
 import gnucash.entity.Split
+import gnucash.entity.Split.Companion.DEFAULT_RECONCILE_DATE
 import java.sql.Connection
 import java.sql.ResultSet
 import java.time.LocalDateTime
@@ -32,6 +33,7 @@ object SplitDao : BaseDao<Split>() {
         val action = resultSet.getString("action")
         val reconcileState = resultSet.getString("reconcile_state")
         val reconcileDate = resultSet.getString("reconcile_date")?.let { LocalDateTime.parse(it, DATETIME_FORMAT) }
+            ?: DEFAULT_RECONCILE_DATE
         val valueNum = resultSet.getLong("value_num")
         val valueDenom = resultSet.getLong("value_denom")
         val quantityNum = resultSet.getLong("quantity_num")
@@ -60,7 +62,7 @@ object SplitDao : BaseDao<Split>() {
         "memo" to entity.memo,
         "action" to entity.action,
         "reconcile_state" to entity.reconcileState,
-        "reconcile_date" to entity.reconcileDate?.let { DATETIME_FORMAT.format(it) },
+        "reconcile_date" to entity.reconcileDate.let { DATETIME_FORMAT.format(it) },
         "value_num" to entity.valueNum,
         "value_denom" to entity.valueDenom,
         "quantity_num" to entity.quantityNum,

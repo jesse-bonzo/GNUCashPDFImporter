@@ -1,22 +1,46 @@
 package gnucash.dao
 
+import mu.KotlinLogging
+import org.sqlite.SQLiteConfig
 import java.sql.Connection
 import java.sql.DriverManager
+import java.util.*
 
-class ConnectionProvider(connectionString: String) : AutoCloseable {
+class ConnectionProvider(private val connectionString: String) : AutoCloseable {
 
-    // this might become problematic if we use multiple threads, but it's good enough for now
-    private val connection_ by lazy {
-        DriverManager.getConnection(connectionString).apply {
-            this.autoCommit = false
+    private val connections = mutableListOf<Connection>()
+    private val defaultProperties = SQLiteConfig().apply {
+        setSynchronous(SQLiteConfig.SynchronousMode.FULL)
+        setEncoding(SQLiteConfig.Encoding.UTF8)
+    }.toProperties()
+
+    @Synchronized
+    fun getConnection(properties: Properties = defaultProperties): Connection {
+        connections.removeIf { it.isClosed }
+
+        return DriverManager.getConnection(connectionString, properties).apply {
+            connections += this
+        }.also {
+            log.debug { "Total connections: ${connections.size}" }
         }
     }
 
-    fun getConnection(): Connection {
-        return connection_
+    @Synchronized
+    override fun close() {
+        connections.removeIf { it.isClosed }
+
+        log.debug { "Closing connections: ${connections.size}" }
+        connections.forEach { connection ->
+            try {
+                connection.close()
+            } catch (exception: Exception) {
+                log.error { exception }
+            }
+        }
     }
 
-    override fun close() {
-        connection_.close()
+    companion object {
+        @JvmStatic
+        private val log = KotlinLogging.logger { }
     }
 }

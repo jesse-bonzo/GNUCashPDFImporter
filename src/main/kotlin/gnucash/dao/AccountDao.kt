@@ -74,6 +74,10 @@ object AccountDao : BaseDao<Account>() {
         findBy(mapOf("parent_guid" to parent.guid, "name" to name))
     }
 
+    fun findAccount(connection: Connection, name: String, parent: Account) = with(connection) {
+        findBy(mapOf("name" to name, "parent_guid" to parent.guid)).singleOrNull()
+    }
+
     fun findAccount(connection: Connection, namePath: List<String>, parent: Account? = null): Account? {
         if (namePath.isEmpty()) {
             return null

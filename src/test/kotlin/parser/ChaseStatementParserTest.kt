@@ -191,10 +191,10 @@ class ChaseStatementParserTest {
 
         assertEquals(1, lines.size)
         val line = lines.single()
+        assertEquals(4, line.size)
         assertEquals("1234 5678 9012 3456", line[0])
-        assertEquals("", line[1])
-        assertEquals("2022-08-10", line[2])
-        assertEquals("STORE 111-222-3333 SS", line[3])
-        assertEquals("23.75", line[4])
+        assertEquals("2022-08-10", line[1])
+        assertEquals("STORE 111-222-3333 SS", line[2])
+        assertEquals("23.75", line[3])
     }
 }

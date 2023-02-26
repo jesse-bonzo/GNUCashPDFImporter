@@ -1,52 +1,54 @@
 package parser
 
 import parser.input.ParserInput
+import parser.output.OutputTransaction
 import parser.output.ParserOutput
-import java.util.regex.Pattern
+import java.math.BigDecimal
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoField
 
-class CitiStatementParser : StatementParser {
-    private val linePattern =
-        Pattern.compile(
-            "^(\\d\\d/\\d\\d)?\\s?(\\d\\d/\\d\\d)\\s([()\\w\\s\\-.,*#&/!']*)\\s(-?\\\$[\\d,]*\\.\\d\\d)\$",
-            Pattern.MULTILINE
-        )
+object CitiStatementParser : StatementParser {
+    private val linePattern = Regex(
+        """^(\d\d/\d\d)?\s?(\d\d/\d\d)\s([()\w\s\-.,*#&/!']*)\s(-?)\$([\d,]*\.\d\d)$""",
+        RegexOption.MULTILINE
+    )
+    private val billingPeriodPattern = Regex("""(\d\d/\d\d/\d\d)-(\d\d/\d\d/\d\d)""")
+    private val billingPeriodDateFormat = DateTimeFormatter.ofPattern("MM/dd/yy")
+    private val txDateFormat = DateTimeFormatter.ofPattern("MM/dd")
+    private val accountNumberPattern = Regex("""Account number ending in (\d{4})""")
+    private val whitespace = Regex("\\s+")
 
     override fun parse(input: ParserInput, output: ParserOutput) {
-        val matcher = linePattern.matcher(input.getText())
-        val lines = mutableListOf<StatmentLine>()
-        while (matcher.find()) {
-            lines.add(StatmentLine.parse((1..matcher.groupCount()).map {
-                matcher.group(it)?.trim()?.replace('\r', ' ')?.replace('\n', ' ') ?: ""
-            }.toList()))
-        }
-//        outputFile.printWriter().use { writer ->
-//            lines.filter { it.amount != "\$0.00" }.map { it.toCSV() }.forEach { writer.println(it) }
-//        }
-    }
+        val text = input.getText()
 
-    data class StatmentLine(
-        val transactionDate: String,
-        val postDate: String,
-        val description: String,
-        val amount: String
-    ) {
+        val billingPeriod =
+            billingPeriodPattern.find(text) ?: throw CitiParsingException("Unable to find billing period")
+        val startDate = LocalDate.parse(billingPeriod.groupValues[1], billingPeriodDateFormat)
+        val endDate = LocalDate.parse(billingPeriod.groupValues[2], billingPeriodDateFormat)
 
-        fun toCSV(): String {
-            return if (transactionDate.isBlank()) {
-                "$postDate|$description|$amount"
+        val accountNumberMatch =
+            accountNumberPattern.find(text) ?: throw CitiParsingException("Unable to find account number")
+        val accountNumber = accountNumberMatch.groupValues[1]
+
+        linePattern.findAll(text).map { matchResult ->
+            val (transactionDate, postDate, description, plusMinus, amount) = matchResult.destructured
+
+            val temporal = txDateFormat.parse(postDate)
+            val postLocalDate = if (temporal[ChronoField.MONTH_OF_YEAR] == startDate.monthValue) {
+                LocalDate.of(startDate.year, temporal[ChronoField.MONTH_OF_YEAR], temporal[ChronoField.DAY_OF_MONTH])
             } else {
-                "$transactionDate|$description|$amount"
+                LocalDate.of(endDate.year, temporal[ChronoField.MONTH_OF_YEAR], temporal[ChronoField.DAY_OF_MONTH])
             }
-        }
 
-        companion object {
-            fun parse(line: List<String>): StatmentLine {
-                val transactionDate = line[0]
-                val postDate = line[1]
-                val description = line[2]
-                val amount = line[3]
-                return StatmentLine(transactionDate, postDate, description, amount)
-            }
-        }
+            OutputTransaction(
+                creditAccount = accountNumber,
+                amount = BigDecimal(plusMinus.trim() + amount.replace(",", "").trim()),
+                description = whitespace.replace(description, " "),
+                postDate = postLocalDate,
+            )
+        }.forEach(output::write)
     }
 }
+
+class CitiParsingException(message: String) : ParsingException(message)

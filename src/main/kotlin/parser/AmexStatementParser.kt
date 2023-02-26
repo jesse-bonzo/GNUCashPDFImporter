@@ -1,45 +1,39 @@
 package parser
 
 import parser.input.ParserInput
+import parser.output.OutputTransaction
 import parser.output.ParserOutput
-import java.util.regex.Pattern
+import java.math.BigDecimal
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
-class AmexStatementParser : StatementParser {
-    private val linePattern = Pattern.compile(
-        "^(\\d\\d/\\d\\d/\\d\\d\\*?)\\s([()\\w\\s\\-.,*#&/!']+)\\s(-?\\\$[\\d,]+\\.\\d\\d)\$",
-        Pattern.MULTILINE
-    )
+object AmexStatementParser : StatementParser {
+    private val linePattern =
+        Regex("""^(\d\d/\d\d/\d\d\*?)\s([()\w\s\-.,*#&/!']+)\s(-?\$[\d,]+\.\d\d)$""", RegexOption.MULTILINE)
+    private val accountNumberPattern = Regex("""Account Ending (\d-\d{5})""")
+    private val dateFormat = DateTimeFormatter.ofPattern("MM/dd/yy")
 
     override fun parse(input: ParserInput, output: ParserOutput) {
-        val matcher = linePattern.matcher(input.getText())
-        val lines = mutableListOf<StatementLine>()
-        while (matcher.find()) {
-            lines.add(StatementLine.parse((1..matcher.groupCount()).map {
-                matcher.group(it)?.trim()?.replace('\r', ' ')?.replace('\n', ' ') ?: ""
-            }.toList()))
-        }
-//        outputFile.printWriter().use { writer ->
-//            lines.filter { it.amount != "\$0.00" }.map { it.toCSV() }.forEach { writer.println(it) }
-//        }
-    }
+        val text = input.getText()
+        val accountNumber = accountNumberPattern.find(text)?.groupValues?.firstOrNull()
+            ?: throw AmexParsingException("Unable to find account number")
 
-    data class StatementLine(
-        val transactionDate: String,
-        val description: String,
-        val amount: String
-    ) {
+        linePattern.findAll(text).map { matchResult ->
+            val transactionDate = matchResult.groupValues[1].replace("*", "").trim()
+            val description = matchResult.groupValues[2].trim()
+            val amount = matchResult.groupValues[3].trim().replace("$", "")
 
-        fun toCSV(): String {
-            return "$transactionDate|$description|$amount"
-        }
-
-        companion object {
-            fun parse(line: List<String>): StatementLine {
-                val transactionDate = line[0].replace('*', ' ')
-                val description = line[1]
-                val amount = line[2]
-                return StatementLine(transactionDate, description, amount)
-            }
+            OutputTransaction(
+                debitAccount = null,
+                creditAccount = accountNumber,
+                postDate = LocalDate.parse(transactionDate, dateFormat),
+                description = description,
+                amount = BigDecimal(amount)
+            )
+        }.forEach {
+            output.write(it)
         }
     }
 }
+
+class AmexParsingException(message: String) : ParsingException(message)

@@ -1,44 +1,62 @@
 package parser
 
 import parser.input.ParserInput
+import parser.output.OutputTransaction
 import parser.output.ParserOutput
-import java.util.regex.Pattern
+import java.math.BigDecimal
+import java.time.LocalDate
+import java.time.Month
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoField
 
-class BankOfAmericaStatementParser : StatementParser {
-    private val linePattern = Pattern.compile("""(\d\d/\d\d)\s(\d\d/\d\d)\s(.*)\s(\d+)\s(\d+)\s(-*\d+\.\d\d)""")
+object BankOfAmericaStatementParser : StatementParser {
+    private val linePattern = Regex("""(\d\d/\d\d)\s(\d\d/\d\d)\s(.*)\s(\d+)\s(\d+)\s(-*\d+\.\d\d)""")
+    private val accountNumberPattern = Regex("""Account Number: (\d{4} \d{4} \d{4} \d{4})""")
+    private val dateRange = Regex("""(\w+ \d{2}) - (\w+ \d{2}, \d{4})""")
+    private val dateRangeStartFormat = DateTimeFormatter.ofPattern("MMMM dd")
+    private val dateRangeEndFormat = DateTimeFormatter.ofPattern("MMMM dd, yyyy")
+    private val postDateFormat = DateTimeFormatter.ofPattern("MM/dd")
 
     override fun parse(input: ParserInput, output: ParserOutput) {
-        val matcher = linePattern.matcher(input.getText())
-        val lines = mutableListOf<StatmentLine>()
-        while (matcher.find()) {
-            lines.add(StatmentLine.parse((1..matcher.groupCount()).map { matcher.group(it) }.toList()))
-        }
-//        outputFile.printWriter().use { writer ->
-//            lines.filter { it.amount != "\$0.00" }.map { it.toCSV() }.forEach { writer.println(it) }
-//        }
-    }
+        val text = input.getText()
+        val accountNumber = accountNumberPattern.find(text)?.groupValues?.firstOrNull()
+            ?: throw BankOfAmericaParsingException("Unable to find account number")
 
-    data class StatmentLine(
-        val transactionDate: String,
-        val postDate: String,
-        val referenceNumber: String,
-        val description: String,
-        val amount: String
-    ) {
-
-        fun toCSV(): String {
-            return "$transactionDate|$referenceNumber|$description|$amount"
+        val dateRangeMatch =
+            dateRange.find(text) ?: throw BankOfAmericaParsingException("Unable to find dates for statement")
+        val dateRangEnd = LocalDate.parse(dateRangeMatch.groupValues[2], dateRangeEndFormat)
+        val temporal = dateRangeStartFormat.parse(dateRangeMatch.groupValues[1])
+        val startMonth = Month.of(temporal[ChronoField.MONTH_OF_YEAR])
+        val startDay = temporal[ChronoField.DAY_OF_MONTH]
+        val startYear = if (dateRangEnd.month == Month.JANUARY && startMonth == Month.DECEMBER) {
+            dateRangEnd.year - 1
+        } else {
+            dateRangEnd.year
         }
+        val dateRangeStart = LocalDate.of(startYear, startMonth, startDay)
 
-        companion object {
-            fun parse(line: List<String>): StatmentLine {
-                val transactionDate = line[0]
-                val postDate = line[1]
-                val description = line[2]
-                val referenceNumber = line[3]
-                val amount = line[5]
-                return StatmentLine(transactionDate, postDate, referenceNumber, description, amount)
-            }
-        }
+        linePattern.findAll(text).map { matchResult ->
+            val (transactionDate, postDate, description, referenceNumber, amount) = matchResult.destructured
+
+            val postDateTemporal = postDateFormat.parse(postDate)
+
+            OutputTransaction(
+                creditAccount = accountNumber,
+                postDate = LocalDate.of(
+                    if (postDateTemporal[ChronoField.MONTH_OF_YEAR] == dateRangeStart.monthValue) {
+                        dateRangeStart.year
+                    } else {
+                        dateRangEnd.year
+                    },
+                    postDateTemporal[ChronoField.MONTH_OF_YEAR],
+                    postDateTemporal[ChronoField.DAY_OF_MONTH]
+                ),
+                description = description,
+                reference = referenceNumber,
+                amount = BigDecimal(amount)
+            )
+        }.forEach(output::write)
     }
 }
+
+class BankOfAmericaParsingException(message: String) : ParsingException(message)

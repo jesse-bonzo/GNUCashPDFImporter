@@ -2,19 +2,11 @@ package gnucash
 
 import java.sql.Connection
 import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeFormatterBuilder
 import java.util.*
 
-val DATETIME_FORMAT: DateTimeFormatter = DateTimeFormatterBuilder()//
-    .parseCaseInsensitive()//
-    .append(DateTimeFormatter.ISO_LOCAL_DATE)//
-    .appendLiteral(' ')//
-    .append(DateTimeFormatter.ISO_LOCAL_TIME)//
-    .toFormatter()
+val DATETIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
-val DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.BASIC_ISO_DATE
-
-fun UUID.toGuid() = mostSignificantBits.toULong().toString(16) + leastSignificantBits.toULong().toString(16)
+fun UUID.toGuid() = toString().replace("-", "")
 
 fun guid() = UUID.randomUUID().toGuid()
 

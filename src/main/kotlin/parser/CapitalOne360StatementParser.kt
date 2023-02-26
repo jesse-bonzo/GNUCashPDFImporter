@@ -1,7 +1,6 @@
 package parser
 
 import parser.input.ParserInput
-import parser.output.AccountType
 import parser.output.OutputTransaction
 import parser.output.ParserOutput
 import java.math.BigDecimal
@@ -20,49 +19,35 @@ object CapitalOne360StatementParser : StatementParser {
     override fun parse(input: ParserInput, output: ParserOutput) {
         val pdfText = input.getText()
         var accountTitle = accountTitleRegex.find(pdfText)
-        val transactions = mutableListOf<OutputTransaction>()
         while (accountTitle != null) {
-            accountTitle.groupValues[1]
-            val accountNumber = accountTitle.groupValues[2]
+            val (accountName, accountNumber) = accountTitle.destructured
             val nextAccountTitle = accountTitleRegex.find(pdfText, accountTitle.range.last)
             val accountStatement =
                 pdfText.substring(accountTitle.range.last, nextAccountTitle?.range?.first ?: pdfText.length)
-            transactions += processAccount(accountNumber, accountStatement)
+            processAccount(accountNumber, accountStatement).forEach(output::write)
             accountTitle = nextAccountTitle
-        }
-
-        transactions.forEach {
-            output.write(it)
         }
     }
 
     private fun processAccount(accountNumber: String, accountStatement: String): List<OutputTransaction> {
         val year = statementPeriodRegex.find(accountStatement)?.let { statementPeriod ->
             statementPeriod.groupValues[3]
-        } ?: LocalDate.now().year
+        } ?: throw CapitalOneParsingException("Unable to determine year")
 
-        val lines = mutableListOf<OutputTransaction>()
-        var found = linePattern.find(accountStatement)
-        while (found != null) {
-            val transactionDate = LocalDate.parse("${found.groupValues[1]} $year", dateFormat)
-            val description = found.groupValues[2]
+        return linePattern.findAll(accountStatement).map { found ->
+            val (date, description, type, plusMinus, amount, balance) = found.destructured
+            val transactionDate = LocalDate.parse("$date $year", dateFormat)
+            val txAmount = plusMinus.trim() + amount.trim().replace(",", "")
 
-            val amount = when (val type = found.groupValues[3]) {
-                "Debit" -> "-${found.groupValues[5].replace(",", "")}"
-                "Credit" -> found.groupValues[5].replace(",", "")
-                else -> throw IllegalArgumentException("Unknown transaction type: $type")
-            }
-
-            lines += OutputTransaction(
+            OutputTransaction(
                 debitAccount = accountNumber,
                 creditAccount = null,
                 postDate = transactionDate,
                 description = description,
-                amount = BigDecimal(amount),
-                accountType = AccountType.CHECKING_SAVING
+                amount = BigDecimal(txAmount),
             )
-            found = found.next()
-        }
-        return lines
+        }.toList()
     }
 }
+
+class CapitalOneParsingException(message: String) : ParsingException(message)
